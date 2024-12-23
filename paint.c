@@ -61,6 +61,8 @@ void clear_screen(void);                // 画面全体をクリア
 typedef enum res {  
     EXIT,       // 終了コマンド  
     LINE,       // 線描画コマンド  
+    RECT,       // 追加：長方形描画
+    CIRCLE,     // 追加：円描画
     UNDO,       // 取り消しコマンド  
     SAVE,       // 保存コマンド  
     UNKNOWN,    // 不明なコマンド  
@@ -372,6 +374,32 @@ void draw_line(Canvas *c, const int x0, const int y0, const int x1, const int y1
     }
 }
 
+void draw_rect(Canvas *c, const int x0, const int y0, const int width, const int height){
+    if (width <= 0 || height <= 0) return;
+
+    int x1 = x0 + width - 1;
+    int y1 = y0 + height - 1;
+
+    draw_line(c, x0, y0, x1, y0);
+    draw_line(c, x0, y1, x1, y1);
+    draw_line(c, x0, y0, x0, y1);
+    draw_line(c, x1, y0, x1, y1);
+}
+
+void draw_circle(Canvas *c, const int x0, const int y0, const int r){
+    if (r <= 0) return;
+
+    for (int deg = 0; deg < 360; deg++){
+        double rad = deg * M_PI / 180.0;
+        int x = x0 + (int)(r * cos(rad));
+        int y = y0 + (int)(r * sin(rad));
+
+        if (x >= 0 && x < c->width && y >= 0 && y < c->height){
+            c->canvas[x][y] = c->pen;
+        }
+    }
+}
+
 void save_history(const char *filename, History *his)
 {
     const char *default_history_file = "history.txt";
@@ -401,6 +429,54 @@ Result interpret_command(const char *command, History *his, Canvas *c)
     if (s == NULL){ // 改行だけ入力された場合
 	return UNKNOWN;
     }
+
+    if (strcmp(s, "rect") == 0){
+        int p[4] = {0};
+        char *b[4];
+
+        for (int i = 0; i < 4; ++i){
+            b[i] = strtok(NULL, " ");
+            if (b[i] == NULL){
+                return ERRLACKARGS;
+            }
+        }
+        for (int i = 0; i < 4; ++i){
+            char *e;
+            long v = strtol(b[i], &e, 10);
+            if (*e != '\0'){
+                return ERRNONINT;
+            }
+            p[i] = (int)v;
+        }
+
+        draw_rect(c, p[0], p[1], p[2], p[3]);
+        return RECT;
+    }
+
+    if (strcmp(s, "circle") == 0){
+        int p[3] = {0};
+        char *b[3];
+
+        for (int i = 0; i < 3; ++i){
+            b[i] = strtok(NULL, " ");
+            if (b[i] == NULL){
+                return ERRLACKARGS;
+            }
+        }
+
+        for (int i = 0; i < 3; ++i){
+            char *e;
+            long v = strtol(b[i], &e, 10);
+            if (*e != '\0'){
+                return ERRNONINT;
+            }
+            p[i] = (int)v;
+        }
+
+        draw_circle(c, p[0], p[1], p[2]);
+        return CIRCLE;
+    }
+
     // The first token corresponds to command
     if (strcmp(s, "line") == 0) {
 	int p[4] = {0}; // p[0]: x0, p[1]: y0, p[2]: x1, p[3]: x1 
@@ -495,6 +571,10 @@ char *strresult(Result res){
 	return "history saved";
     case LINE:
 	return "1 line drawn";
+    case RECT:
+    return "1 rectangle drawn";
+    case CIRCLE:
+    return "1 circle drawn";
     case UNDO:
 	return "undo!";
     case UNKNOWN:
