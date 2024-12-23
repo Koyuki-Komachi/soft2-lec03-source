@@ -65,7 +65,9 @@ typedef enum res {
     CIRCLE,     // 追加：円描画
     UNDO,       // 取り消しコマンド  
     SAVE,       // 保存コマンド  
-    UNKNOWN,    // 不明なコマンド  
+    LOAD,       // 追加：ロードコマンド成功
+    UNKNOWN,    // 不明なコマンド
+    ERRFILE,    // 追加：ファイルエラー  
     ERRNONINT,  // 整数以外の入力エラー  
     ERRLACKARGS,// 引数不足エラー  
     NOCOMMAND   // 履歴が空のエラー  
@@ -419,6 +421,86 @@ void save_history(const char *filename, History *his)
     fclose(fp);
 }
 
+Result load_history(const char *filename, History *his, Canvas *c){
+    const char *default_history_file = "history.txt";
+    if (filename == NULL){
+        filename = default_history_file;
+    }
+
+    FILE *fp;
+    if ((fp = fopen(filename, "r")) == NULL){
+        fprintf(stderr, "error: cannot open %s.\n", filename);
+        return ERRFILE;
+    }
+
+    reset_canvas(c);
+
+    char buf[his->bufsize];
+    while (fgets(buf, his->bufsize, fp) != NULL){
+        size_t len = strlen(buf);
+
+        if (len >= his->bufsize){
+            fprintf(stderr, "error: command too long.\n");
+            fclose(fp);
+            return ERRFILE;
+        }
+
+        char tmp[his->bufsize];
+        strcpy(tmp, buf);
+        char *cmd = strtok(tmp, " ");
+
+        if (cmd != NULL){
+            if (strcmp(cmd, "line") == 0 || 
+                strcmp(cmd, "rect") == 0 ||
+                strcmp(cmd, "circle") == 0){
+
+                    char *new_str = (char*)malloc(his->bufsize);
+
+                    if (new_str == NULL){
+                        fprintf(stderr, "error: memory allocation failed.\n");
+                        fclose(fp);
+                        return ERRFILE;
+                    }
+
+                    strcpy(new_str, buf);
+
+                    Result r = interpret_command(new_str, his, c);
+                    if (r == ERRNONINT || r == ERRLACKARGS){
+                        free(new_str);
+                        fclose(fp);
+                        return r;
+                    }
+
+                    Command *cmd = (Command*)malloc(sizeof(Command));
+                    if (cmd == NULL){
+                        free(new_str);
+                        fclose(fp);
+                        fprintf(stderr, "error: memory allocation failed.\n");
+                        return ERRFILE;
+                    }
+
+                    *cmd = (Command){
+                        .str = new_str,
+                        .bufsize = his->bufsize,
+                        .next = NULL
+                    };
+
+                    Command *p = his->begin;
+                    if (p == NULL){
+                        his->begin = cmd;
+                    } else {
+                        while (p->next != NULL){
+                            p = p->next;
+                        }
+                        p->next = cmd;
+                    }
+                }
+        }
+    }
+    fclose(fp);
+    return LOAD;
+}
+
 Result interpret_command(const char *command, History *his, Canvas *c)
 {
     char buf[his->bufsize];
@@ -569,6 +651,8 @@ char *strresult(Result res){
 	break;
     case SAVE:
 	return "history saved";
+    case LOAD:
+    return "loaded history file";
     case LINE:
 	return "1 line drawn";
     case RECT:
@@ -583,6 +667,8 @@ char *strresult(Result res){
 	return "Non-int value is included";
     case ERRLACKARGS:
 	return "Too few arguments";
+    case ERRFILE:
+    return "file not open or memory not allocated";
     case NOCOMMAND:
 	return "No command in history";
     }
