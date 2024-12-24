@@ -1,4 +1,8 @@
+chpen *
 line 10 10 10 10
 line 10 10 30 30
 line 30 30 10 30
 line 10 30 10 10
+chpen o
+line 20 10 30 50
+circle 10 10 5

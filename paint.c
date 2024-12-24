@@ -66,6 +66,7 @@ typedef enum res {
     UNDO,       // 取り消しコマンド  
     SAVE,       // 保存コマンド  
     LOAD,       // 追加：ロードコマンド成功
+    CHPEN,      // 追加：ペン文字変更
     UNKNOWN,    // 不明なコマンド
     ERRFILE,    // 追加：ファイルエラー  
     ERRNONINT,  // 整数以外の入力エラー  
@@ -144,6 +145,14 @@ int main(int argc, char **argv) {
     
     printf("\n");  // Windows環境用の改行  
 
+    // 初期ペン設定を履歴に追加
+    sprintf(buf, "chpen %c\n", pen);
+    if (push_command(&his, buf) == NULL){
+        fprintf(stderr, "error: cannot save initial pen command.\n");
+        free_canvas(c);
+        return EXIT_FAILURE;
+    }
+
     /*  
      * メインループ  
      * - ユーザーからのコマンド入力を処理  
@@ -181,7 +190,7 @@ int main(int argc, char **argv) {
         /*  
          * 線描画コマンド、長方形描画コマンド、円描画コマンドの場合、履歴に追加  
          */  
-        if (r == LINE || r == RECT || r == CIRCLE) {  
+        if (r == LINE || r == RECT || r == CIRCLE || r == CHPEN) {  
             push_command(&his, buf);  
         }  
         
@@ -456,7 +465,8 @@ Result load_history(const char *filename, History *his, Canvas *c){
         if (cmd != NULL){
             if (strcmp(cmd, "line") == 0 || 
                 strcmp(cmd, "rect") == 0 ||
-                strcmp(cmd, "circle") == 0){
+                strcmp(cmd, "circle") == 0 ||
+                strcmp(cmd, "chpen") == 0){
 
                     char *new_str = (char*)malloc(his->bufsize);
 
@@ -518,6 +528,34 @@ Result interpret_command(const char *command, History *his, Canvas *c)
 	return UNKNOWN;
     }
 
+    // chpenコマンドを認識して、文字種を変える
+    if (strcmp(s, "chpen") == 0){
+        char *pen = strtok(NULL, " ");
+
+        if (pen == NULL){
+            return ERRLACKARGS;
+        }
+
+        // 特殊文字のチェック
+        if (pen[0] == ' ' || pen[0] =='\t' || pen[0] == '\n' || pen[0] == '\0'){
+            return ERRLACKARGS;
+        }
+
+        // 文字列長とヌル文字の位置を確認
+        if (pen[1] != '\0'){
+            return ERRLACKARGS;
+        }
+
+        // 追加の引数がないかチェック
+        if (strtok(NULL, " ") != NULL){
+            return UNKNOWN;
+        }
+
+        c->pen = pen[0];
+        return CHPEN;
+    }
+
+    // loadコマンドを認識して、load_historyを実行する
     if (strcmp(s, "load") == 0){
         const char *filename = strtok(NULL, " ");
         
@@ -527,6 +565,7 @@ Result interpret_command(const char *command, History *his, Canvas *c)
         return load_history(filename, his, c);
     }
 
+    // rectコマンドを認識して、draw_rectを実行する
     if (strcmp(s, "rect") == 0){
         int p[4] = {0};
         char *b[4];
@@ -550,6 +589,7 @@ Result interpret_command(const char *command, History *his, Canvas *c)
         return RECT;
     }
 
+    // circleコマンドを認識して、draw_circleを実行する
     if (strcmp(s, "circle") == 0){
         int p[3] = {0};
         char *b[3];
@@ -574,7 +614,7 @@ Result interpret_command(const char *command, History *his, Canvas *c)
         return CIRCLE;
     }
 
-    // The first token corresponds to command
+    // lineコマンドを認識して、draw_lineを実行する
     if (strcmp(s, "line") == 0) {
 	int p[4] = {0}; // p[0]: x0, p[1]: y0, p[2]: x1, p[3]: x1 
 	char *b[4];
@@ -597,12 +637,14 @@ Result interpret_command(const char *command, History *his, Canvas *c)
 	return LINE;
     }
     
+    // saveコマンドを認識して、save_historyを実行する
     if (strcmp(s, "save") == 0) {
 	s = strtok(NULL, " ");
 	save_history(s, his);
 	return SAVE;
     }
     
+    // undoコマンドを認識して、これを実行する
     if (strcmp(s, "undo") == 0) {
 	reset_canvas(c);
 	//[*] 線形リストの先頭からスキャンして逐次実行
@@ -674,6 +716,8 @@ char *strresult(Result res){
     return "1 rectangle drawn";
     case CIRCLE:
     return "1 circle drawn";
+    case CHPEN:
+    return "pen changed";
     case UNDO:
 	return "undo!";
     case UNKNOWN:
