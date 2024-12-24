@@ -179,9 +179,9 @@ int main(int argc, char **argv) {
         printf("%s\n", strresult(r));  // 結果メッセージの表示  
 
         /*  
-         * 線描画コマンドの場合、履歴に追加  
+         * 線描画コマンド、長方形描画コマンド、円描画コマンドの場合、履歴に追加  
          */  
-        if (r == LINE) {  
+        if (r == LINE || r == RECT || r == CIRCLE) {  
             push_command(&his, buf);  
         }  
         
@@ -422,6 +422,7 @@ void save_history(const char *filename, History *his)
 }
 
 Result load_history(const char *filename, History *his, Canvas *c){
+    // ファイル名の指定がない場合は、history.txtに保存する
     const char *default_history_file = "history.txt";
     if (filename == NULL){
         filename = default_history_file;
@@ -435,16 +436,19 @@ Result load_history(const char *filename, History *his, Canvas *c){
 
     reset_canvas(c);
 
+    // 履歴ファイルの内容を読み込む
     char buf[his->bufsize];
     while (fgets(buf, his->bufsize, fp) != NULL){
         size_t len = strlen(buf);
 
+        // 履歴ファイルの中のコマンドが長すぎる場合のエラー
         if (len >= his->bufsize){
             fprintf(stderr, "error: command too long.\n");
             fclose(fp);
             return ERRFILE;
         }
 
+        // コマンドをtmpにコピーし、strtokにより、コマンド名だけをcmdに入れる
         char tmp[his->bufsize];
         strcpy(tmp, buf);
         char *cmd = strtok(tmp, " ");
@@ -479,12 +483,14 @@ Result load_history(const char *filename, History *his, Canvas *c){
                         return ERRFILE;
                     }
 
+                    // コマンドをCommand構造体の形にする
                     *cmd = (Command){
                         .str = new_str,
                         .bufsize = his->bufsize,
                         .next = NULL
                     };
 
+                    // コマンドを線形リストの最後尾に追加
                     Command *p = his->begin;
                     if (p == NULL){
                         his->begin = cmd;
@@ -510,6 +516,15 @@ Result interpret_command(const char *command, History *his, Canvas *c)
     const char *s = strtok(buf, " ");
     if (s == NULL){ // 改行だけ入力された場合
 	return UNKNOWN;
+    }
+
+    if (strcmp(s, "load") == 0){
+        const char *filename = strtok(NULL, " ");
+        
+        if (strtok(NULL, " ") != NULL){
+            return UNKNOWN;
+        }
+        return load_history(filename, his, c);
     }
 
     if (strcmp(s, "rect") == 0){
